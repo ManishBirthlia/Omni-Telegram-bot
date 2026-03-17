@@ -17,6 +17,12 @@ from handlers.chat import groq_AI_chatting
 from utilities import cancel_if_command, upload_to_gofile_async
 from handlers.ytDownloader import download_video, fetch_formats, build_quality_keyboard, _fetch_and_show_qualities
 from handlers.generateVideo import start_video_generation
+from handlers.generateImage import (
+    generate_image,
+    build_aspect_ratio_keyboard,
+    build_img_quality_keyboard,
+    build_neg_prompt_keyboard,
+)
 from handlers.directDownloader import cmd_yt_downloader, cmd_insta_downloader
 
 # ── URL patterns for YouTube & Instagram ──────────────────────
@@ -41,7 +47,10 @@ class BotStates(StatesGroup):
     waiting_for_quality = State()   # /ytDownloader — step 2
     Video_prompt        = State()   # /generateVideo — step 1
     Audio_prompt        = State()   # /generateVideo — step 2
-    Image_prompt        = State()   # /generateVideo — step 3
+    Image_prompt        = State()   # /generateImage — step 1: prompt
+    Image_aspect_ratio  = State()   # /generateImage — step 2: aspect ratio
+    Image_quality       = State()   # /generateImage — step 3: quality
+    Image_negative      = State()   # /generateImage — step 4: negative prompt
 
 #  BOT & DISPATCHER
 bot = Bot(token=os.getenv("TELEGRAM_BOT_TOKEN"))
@@ -332,6 +341,131 @@ async def receive_video_topic(message: aiogram_types.Message, state: FSMContext)
         return
     await state.clear()
     await start_video_generation(message, topic, STORAGE_DIR, LTX_API_URL)
+
+# ═══════════════════════════════════════════════════════════════
+#  /generateImage  (prompt → aspect ratio → quality → neg prompt)
+# ═══════════════════════════════════════════════════════════════
+@dp.message(Command("generateImage"))
+async def cmd_generate_image(
+    message: aiogram_types.Message,
+    command: CommandObject,
+    state: FSMContext,
+):
+    await state.clear()
+
+    if command.args:
+        # Inline: /generateImage <prompt> — store & jump to aspect ratio
+        await state.update_data(img_prompt=command.args.strip())
+        await state.set_state(BotStates.Image_aspect_ratio)
+        await message.answer(
+            "📐 <b>Choose an aspect ratio:</b>",
+            parse_mode="HTML",
+            reply_markup=build_aspect_ratio_keyboard(),
+        )
+        return
+
+    await state.set_state(BotStates.Image_prompt)
+    await message.answer(
+        "🖼️ <b>Image Generation</b>\n\n"
+        "Describe the image you want to create.\n\n"
+        "<b>Examples:</b>\n"
+        "• A futuristic cityscape at sunset\n"
+        "• A cute dragon sitting on a pile of gold coins\n"
+        "• Vintage steampunk-inspired airship above a Victorian city\n\n"
+        "<i>Type your prompt below 👇</i>",
+        parse_mode="HTML",
+    )
+
+# Step 1 — receive prompt text
+@dp.message(BotStates.Image_prompt)
+async def receive_image_prompt(message: aiogram_types.Message, state: FSMContext):
+    if await cancel_if_command(message, state, resume_command="/generateImage"):
+        return
+    prompt = (message.text or "").strip()
+    if not prompt:
+        await message.answer("Please enter a prompt for the image.")
+        return
+    await state.update_data(img_prompt=prompt)
+    await state.set_state(BotStates.Image_aspect_ratio)
+    await message.answer(
+        "📐 <b>Choose an aspect ratio:</b>",
+        parse_mode="HTML",
+        reply_markup=build_aspect_ratio_keyboard(),
+    )
+
+# Step 2 — aspect ratio selected
+@dp.callback_query(BotStates.Image_aspect_ratio, F.data.startswith("img_ar:"))
+async def receive_image_aspect_ratio(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    choice = callback.data.split(":", 1)[1]
+    if choice == "cancel":
+        await callback.message.edit_text("❌ Image generation cancelled.")
+        await state.clear()
+        return
+    await state.update_data(img_aspect_ratio=choice)
+    await state.set_state(BotStates.Image_quality)
+    await callback.message.edit_text(
+        "⚙️ <b>Select image quality:</b>",
+        parse_mode="HTML",
+        reply_markup=build_img_quality_keyboard(),
+    )
+
+# Step 3 — quality selected
+@dp.callback_query(BotStates.Image_quality, F.data.startswith("img_quality:"))
+async def receive_image_quality(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    choice = callback.data.split(":", 1)[1]
+    if choice == "cancel":
+        await callback.message.edit_text("❌ Image generation cancelled.")
+        await state.clear()
+        return
+    await state.update_data(img_quality=choice)
+    await state.set_state(BotStates.Image_negative)
+    await callback.message.edit_text(
+        "🚫 <b>Negative prompt</b> (optional)\n\n"
+        "Describe what you <b>don't</b> want in the image.\n\n"
+        "<i>Examples: blurry, low quality, watermark, text, extra fingers</i>\n\n"
+        "Type below or tap <b>Skip</b> to continue without one.",
+        parse_mode="HTML",
+        reply_markup=build_neg_prompt_keyboard(),
+    )
+
+# Step 4a — negative prompt skipped via button
+@dp.callback_query(BotStates.Image_negative, F.data.startswith("img_neg:"))
+async def receive_neg_prompt_callback(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    choice = callback.data.split(":", 1)[1]
+    if choice == "cancel":
+        await callback.message.edit_text("❌ Image generation cancelled.")
+        await state.clear()
+        return
+    # "skip" — generate with no negative prompt
+    await callback.message.edit_text("✅ Starting generation...")
+    data = await state.get_data()
+    await state.clear()
+    await generate_image(
+        callback.message,
+        prompt=data.get("img_prompt", ""),
+        aspect_ratio=data.get("img_aspect_ratio", "16:9"),
+        quality_key=data.get("img_quality", "balanced"),
+        negative_prompt="",
+    )
+
+# Step 4b — negative prompt typed as text
+@dp.message(BotStates.Image_negative)
+async def receive_neg_prompt_text(message: aiogram_types.Message, state: FSMContext):
+    if await cancel_if_command(message, state, resume_command="/generateImage"):
+        return
+    neg = (message.text or "").strip()
+    data = await state.get_data()
+    await state.clear()
+    await generate_image(
+        message,
+        prompt=data.get("img_prompt", ""),
+        aspect_ratio=data.get("img_aspect_ratio", "16:9"),
+        quality_key=data.get("img_quality", "balanced"),
+        negative_prompt=neg,
+    )
 
 #  /help
 @dp.message(Command("help"))
