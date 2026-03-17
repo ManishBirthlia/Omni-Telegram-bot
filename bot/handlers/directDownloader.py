@@ -121,7 +121,6 @@ async def _deliver_file(
     finally:
         # Uncomment the line below to delete local files after delivery:
         filepath.unlink(missing_ok=True)
-        pass
 
 
 # ═══════════════════════════════════════════════════════════════

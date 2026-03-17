@@ -3,6 +3,7 @@ import re
 import asyncio
 import yt_dlp
 import requests
+from openai import OpenAI
 from pathlib import Path
 from aiogram.types import FSInputFile
 from aiogram import Bot, Dispatcher, types as aiogram_types, F
@@ -13,7 +14,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv
 from groq import Groq
-from handlers.chat import groq_AI_chatting
+from handlers.chat import groq_AI_chatting, nvidia_AI_chatting
 from utilities import cancel_if_command, upload_to_gofile_async
 from handlers.ytDownloader import download_video, fetch_formats, build_quality_keyboard, _fetch_and_show_qualities
 from handlers.generateVideo import start_video_generation
@@ -37,7 +38,11 @@ _IG_RE = re.compile(
 
 load_dotenv()
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+nvidia_client = OpenAI(
+  base_url = "https://integrate.api.nvidia.com/v1",
+  api_key = os.getenv("NVIDIA_CHAT_API_KEY")
+) 
 # openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 #  FSM STATE GROUP
@@ -160,7 +165,7 @@ async def cmd_chat(message: aiogram_types.Message, state: FSMContext):
 async def receive_chat_message(message: aiogram_types.Message, state: FSMContext):
     if await cancel_if_command(message, state, resume_command="/chat"):
         return
-    await groq_AI_chatting(message, SYSTEM_INSTRUCTION, client)
+    await nvidia_AI_chatting(message, SYSTEM_INSTRUCTION, nvidia_client)
 
 
 # ═══════════════════════════════════════════════════════════════
