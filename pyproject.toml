@@ -1,7 +1,7 @@
 [project]
-name = "autoytube-ai"
+name = "Omni Telegram Bot"
 version = "0.1.0"
-description = "Add your description here"
+description = "Omni Telegram Bot"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [

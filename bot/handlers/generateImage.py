@@ -149,6 +149,8 @@ async def generate_image(
             parse_mode="HTML",
         )
         await status_msg.delete()
+        # Uncomment the line below to delete local files after delivery:
+        filepath.unlink(missing_ok=True)
 
     except requests.exceptions.Timeout:
         await status_msg.edit_text(

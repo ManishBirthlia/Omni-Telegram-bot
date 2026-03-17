@@ -1,37 +1,295 @@
+# ── Bot Deployment ────────────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kids-toon-bot
+  name: omni-telegram-bot
   labels:
-    app: kids-toon
+    app: omni-telegram-bot
+    component: bot
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: kids-toon
+      app: omni-telegram-bot
+      component: bot
   template:
     metadata:
       labels:
-        app: kids-toon
+        app: omni-telegram-bot
+        component: bot
     spec:
       containers:
         - name: bot
-          image: your-registry/kids-toon-ai:latest
+          image: your-registry/omni-telegram-bot:latest
+          command: ["python", "-m", "bot.main"]
           envFrom:
             - secretRef:
-                name: kids-toon-env
+                name: omni-telegram-bot-env
           ports:
-            - containerPort: 80
-          command: ["python", "-m", "bot.main"]
+            - containerPort: 9090
+              name: metrics
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          livenessProbe:
+            exec:
+              command: ["python", "-c", "import asyncio; asyncio.run(__import__('asyncio').sleep(0))"]
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          volumeMounts:
+            - name: downloads-yt
+              mountPath: /app/Youtube Downloads
+            - name: downloads-ig
+              mountPath: /app/Instagram Downloads
+            - name: generated-images
+              mountPath: /app/Generated Images
+      volumes:
+        - name: downloads-yt
+          persistentVolumeClaim:
+            claimName: omni-bot-downloads-yt
+        - name: downloads-ig
+          persistentVolumeClaim:
+            claimName: omni-bot-downloads-ig
+        - name: generated-images
+          persistentVolumeClaim:
+            claimName: omni-bot-generated-images
+---
+# ── Celery Worker Deployment ──────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: omni-telegram-bot-worker
+  labels:
+    app: omni-telegram-bot
+    component: celery-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: omni-telegram-bot
+      component: celery-worker
+  template:
+    metadata:
+      labels:
+        app: omni-telegram-bot
+        component: celery-worker
+    spec:
+      containers:
+        - name: celery-worker
+          image: your-registry/omni-telegram-bot:latest
+          command:
+            - celery
+            - -A
+            - workers.celery_app
+            - worker
+            - -Q
+            - intelligence,generation,assembly,upload
+            - --concurrency=4
+          envFrom:
+            - secretRef:
+                name: omni-telegram-bot-env
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          volumeMounts:
+            - name: downloads-yt
+              mountPath: /app/Youtube Downloads
+            - name: downloads-ig
+              mountPath: /app/Instagram Downloads
+            - name: generated-images
+              mountPath: /app/Generated Images
+      volumes:
+        - name: downloads-yt
+          persistentVolumeClaim:
+            claimName: omni-bot-downloads-yt
+        - name: downloads-ig
+          persistentVolumeClaim:
+            claimName: omni-bot-downloads-ig
+        - name: generated-images
+          persistentVolumeClaim:
+            claimName: omni-bot-generated-images
+---
+# ── Redis Deployment ──────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: omni-telegram-bot-redis
+  labels:
+    app: omni-telegram-bot
+    component: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: omni-telegram-bot
+      component: redis
+  template:
+    metadata:
+      labels:
+        app: omni-telegram-bot
+        component: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+# ── Postgres Deployment ───────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: omni-telegram-bot-postgres
+  labels:
+    app: omni-telegram-bot
+    component: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: omni-telegram-bot
+      component: postgres
+  template:
+    metadata:
+      labels:
+        app: omni-telegram-bot
+        component: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: omni-telegram-bot-env
+          env:
+            - name: POSTGRES_DB
+              value: omni_telegram_bot
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "user", "-d", "omni_telegram_bot"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: pgdata
+          persistentVolumeClaim:
+            claimName: omni-bot-pgdata
+---
+# ── Services ──────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: omni-telegram-bot-metrics
+  labels:
+    app: omni-telegram-bot
+spec:
+  selector:
+    app: omni-telegram-bot
+    component: bot
+  ports:
+    - protocol: TCP
+      port: 9090
+      targetPort: 9090
+      name: metrics
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: kids-toon-service
+  name: omni-telegram-bot-redis
+  labels:
+    app: omni-telegram-bot
 spec:
   selector:
-    app: kids-toon
+    app: omni-telegram-bot
+    component: redis
   ports:
     - protocol: TCP
-      port: 80
-      targetPort: 80
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: omni-telegram-bot-postgres
+  labels:
+    app: omni-telegram-bot
+spec:
+  selector:
+    app: omni-telegram-bot
+    component: postgres
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+---
+# ── Persistent Volume Claims ─────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: omni-bot-pgdata
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: omni-bot-downloads-yt
+spec:
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: omni-bot-downloads-ig
+spec:
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: omni-bot-generated-images
+spec:
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: 10Gi

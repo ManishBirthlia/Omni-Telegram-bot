@@ -1,23 +1,31 @@
-version: "3.8"
-
 services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   postgres:
     image: postgres:15-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: kidstoon
+      POSTGRES_DB: omni_telegram_bot
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d omni_telegram_bot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   bot:
     build: .
@@ -25,8 +33,16 @@ services:
     env_file:
       - .env
     depends_on:
-      - redis
-      - postgres
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./Youtube Downloads:/app/Youtube Downloads
+      - ./Instagram Downloads:/app/Instagram Downloads
+      - ./Generated Images:/app/Generated Images
     command: python -m bot.main
 
   celery-worker:
@@ -35,8 +51,14 @@ services:
     env_file:
       - .env
     depends_on:
-      - redis
-      - postgres
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./Youtube Downloads:/app/Youtube Downloads
+      - ./Instagram Downloads:/app/Instagram Downloads
+      - ./Generated Images:/app/Generated Images
     command: celery -A workers.celery_app worker -Q intelligence,generation,assembly,upload --concurrency=4
 
 volumes:
