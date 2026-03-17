@@ -24,13 +24,16 @@
 
 ## 🎯 Project Overview
 
-**AutoTube AI** is a multi-purpose Telegram bot designed to be a personal Swiss Army knife. Instead of switching between 10 apps or websites, you message one bot and get things done:
+**Omni AI** is a multi-purpose Telegram bot designed to be a personal Swiss Army knife. Instead of switching between 10 apps or websites, you message one bot and get things done:
 
 - 📥 Paste a YouTube link → get the video downloaded to your phone
 - 📸 Paste an Instagram link → get the reel/post saved instantly
 - 🎬 Describe a scene → get an AI-generated video
-- 💬 Ask a question → get an AI-powered answer (Groq/LLaMA)
+- 💬 Ask a question → get an AI-powered answer (Groq/LLaMA/Nvidia)
 - 🎙️ Send audio → get a full transcription
+- 📝 Generate Audio from Text
+- 📸 Generate Image from Text
+- 📹 Generate Video from Text
 
 **The vision:** One bot that keeps getting smarter. Every useful tool you wish existed — built into one Telegram interface.
 
@@ -47,6 +50,8 @@
 | AI video generation (LTX Video) | ✅ Done | `/generateVideo` |
 | Large file uploads to GoFile | ✅ Done | Auto (files > 50 MB) |
 | Separate download folders | ✅ Done | `Youtube Downloads/` & `Instagram Downloads/` |
+| AI Image Generation | ✅ Done | `/generateImage` |
+| AI Audio Generation | ✅ Done | `/generateAudio` |
 
 ---
 
