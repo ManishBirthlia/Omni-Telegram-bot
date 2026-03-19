@@ -1,0 +1,85 @@
+# Merge `/ytDownloader` + `/instaDownloader` → Unified `/downloader`
+
+Combine both video download commands into a single `/downloader` command that auto-detects the platform and validates the URL is actually a downloadable video before proceeding.
+
+## Proposed Changes
+
+### Handler module — consolidate into one file
+
+#### [MODIFY] [videoDownloader.py](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/handlers/ytDownloader.py)
+
+Rename [ytDownloader.py](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/handlers/ytDownloader.py) → `videoDownloader.py` and make it platform-agnostic:
+
+- Rename all comments from "YOUTUBE DOWNLOADER" → "VIDEO DOWNLOADER"
+- Add a `validate_video_url(url)` function that uses `yt_dlp.YoutubeDL.extract_info()` in simulate mode to verify the URL is a real video supported by yt_dlp, **not** just any random link. Returns [(True, extractor_name)](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/main.py#642-650) or [(False, error_message)](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/main.py#642-650).
+- Keep the same [fetch_formats](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/handlers/ytDownloader.py#53-74), [download_video](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/handlers/instaDownloader.py#79-112), [build_quality_keyboard](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/handlers/ytDownloader.py#13-48), [_fetch_and_show_qualities](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/handlers/instaDownloader.py#117-163) functions — they already work for both YouTube and Instagram via yt_dlp.
+- Update [_fetch_and_show_qualities](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/handlers/instaDownloader.py#117-163) to accept a generic `quality_state` parameter instead of hardcoding `BotStates.waiting_for_quality` or `BotStates.insta_waiting_for_quality`.
+- Update the error message in [_fetch_and_show_qualities](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/handlers/instaDownloader.py#117-163) from "YouTube video" to a generic "video URL".
+
+#### [DELETE] [instaDownloader.py](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/handlers/instaDownloader.py)
+
+No longer needed — `videoDownloader.py` handles all yt_dlp-supported sites.
+
+---
+
+### Main bot — unified command
+
+#### [MODIFY] [main.py](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/main.py)
+
+**Imports:**
+- Remove the `instaDownloader` import block entirely
+- Change `from handlers.ytDownloader import ...` → `from handlers.videoDownloader import ...`
+- Add import of new `validate_video_url` function
+
+**FSM States:**
+- Remove `insta_waiting_for_url` and `insta_waiting_for_quality`
+- Rename `waiting_for_url` → `dl_waiting_for_url` and `waiting_for_quality` → `dl_waiting_for_quality` for clarity
+
+**Command handlers — replace two commands with one:**
+- Delete the `/ytDownloader` command handler (lines 181-219)
+- Delete the `/instaDownloader` command handler (lines 321-359)
+- Delete the `/instaDownloader` quality callback handler (lines 362-452)
+- Add a single `/downloader` command handler that:
+  1. Accepts optional inline URL (`/downloader https://...`)
+  2. If no URL given, prompts user to send one (enter `dl_waiting_for_url`)
+- Add a single URL receiver (in `dl_waiting_for_url` state) that:
+  1. Checks the URL starts with `http://` or `https://`
+  2. Calls `validate_video_url(url)` to verify it's a real video URL supported by yt_dlp
+  3. If invalid → sends user message: "❌ This URL is not a supported video link. I support YouTube, Instagram, Twitter/X, TikTok, and 1000+ other video platforms."
+  4. If valid → calls [_fetch_and_show_qualities()](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/handlers/instaDownloader.py#117-163)
+- Keep the existing quality callback handler (for `dl_quality:` prefix), which already works for any yt_dlp source
+
+**Fallback handler:**
+- Update the no-state text handler to use the unified `directDownloader` functions (works for both YouTube and Instagram URLs already)
+- Expand the regex pattern to also match Twitter/X, TikTok, Facebook, and other common video URLs, or better yet, use `validate_video_url()` for any URL
+
+**SYSTEM_INSTRUCTION & HELP_TEXT:**
+- Replace `/ytDownloader` and `/instaDownloader` references with `/downloader`
+- Update the description to say "Download video from YouTube, Instagram, or 1000+ supported sites"
+
+---
+
+### Direct downloader — merge into one function
+
+#### [MODIFY] [directDownloader.py](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/handlers/directDownloader.py)
+
+- Merge [cmd_yt_downloader](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/handlers/directDownloader.py#129-150) and [cmd_insta_downloader](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/main.py#321-343) into a single `cmd_direct_download(message, url)` function
+- Auto-detect platform from URL for the "Downloading..." status message
+- Delete the two separate functions
+
+---
+
+## Verification Plan
+
+### Manual Verification
+
+Since there are no automated tests in this project, verification will be manual via Telegram:
+
+1. **Start the bot** — run `python bot/main.py`
+2. **Test `/downloader` with a YouTube URL** — send `/downloader https://www.youtube.com/watch?v=dQw4w9WgXcQ` and verify the quality keyboard appears
+3. **Test `/downloader` with an Instagram URL** — send `/downloader https://www.instagram.com/reel/...` and verify it works
+4. **Test `/downloader` with no URL** — send `/downloader`, then send a valid YouTube URL when prompted
+5. **Test invalid URL** — send `/downloader https://www.google.com` and verify the bot rejects it with the appropriate message
+6. **Test random text** — send `/downloader hello world` and verify rejection
+7. **Test old commands no longer exist** — send `/ytDownloader` and `/instaDownloader` and verify they are no longer recognized
+8. **Test fallback auto-detect** — paste a bare YouTube URL (no command) and verify it auto-downloads

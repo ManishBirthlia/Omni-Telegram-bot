@@ -4,9 +4,59 @@ import asyncio
 import yt_dlp
 
 # ═══════════════════════════════════════════════════════════════
-#  YOUTUBE DOWNLOADER — quality keyboard
+#  VIDEO DOWNLOADER — URL validation
 #
-#  OPTION B: labels show estimated size.
+#  Uses yt-dlp's own extractors to decide whether a URL is a
+#  downloadable video.  Returns (True, extractor_key) on success
+#  or (False, error_string) on failure.
+# ═══════════════════════════════════════════════════════════════
+def validate_video_url(url: str) -> tuple[bool, str]:
+    """
+    Probe *url* with yt-dlp in simulate mode (no download).
+    Returns (True, extractor_name)  — URL is a valid video
+            (False, error_message)  — URL is NOT supported / not a video
+    """
+    ydl_opts = {
+        "quiet":       True,
+        "no_warnings": True,
+        "skip_download": True,
+        # Don't actually download anything — just probe
+        "simulate":    True,
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+
+        if info is None:
+            return False, "yt-dlp returned no info for this URL."
+
+        # yt-dlp uses "Generic" extractor for random pages (HTML with
+        # an embedded <video> tag, direct .mp4 links, etc.).
+        # We allow Generic only if it actually found a video format.
+        extractor = info.get("extractor_key") or info.get("extractor") or "Generic"
+
+        # For playlists yt-dlp returns _type="playlist" — we only want
+        # single-video URLs for this flow.
+        if info.get("_type") == "playlist":
+            # Pick the first entry's extractor if available
+            entries = info.get("entries")
+            if entries:
+                first = next(iter(entries), None)
+                if first:
+                    extractor = first.get("extractor_key") or extractor
+
+        return True, extractor
+
+    except yt_dlp.utils.DownloadError as e:
+        return False, str(e)
+    except Exception as e:
+        return False, str(e)
+
+
+# ═══════════════════════════════════════════════════════════════
+#  VIDEO DOWNLOADER — quality keyboard
+#
+#  Labels show estimated size.
 #  Anything estimated over WARN_SIZE_BYTES gets "⚠️ Via link"
 #  so the user knows upfront it will arrive as a gofile link.
 # ═══════════════════════════════════════════════════════════════
@@ -32,7 +82,6 @@ def build_quality_keyboard(formats: list[dict], WARN_SIZE_BYTES: int) -> InlineK
         if filesize:
             size_mb = filesize / 1_048_576
             label  += f"  ~{size_mb:.1f} MB"
-            # ── OPTION B: warn visually if likely over Telegram's limit ──
             if filesize > WARN_SIZE_BYTES:
                 label += "  ⚠️ Via link"
 
@@ -48,7 +97,7 @@ def build_quality_keyboard(formats: list[dict], WARN_SIZE_BYTES: int) -> InlineK
 
 
 # ═══════════════════════════════════════════════════════════════
-#  YOUTUBE DOWNLOADER — fetch formats (metadata only)
+#  VIDEO DOWNLOADER — fetch formats (metadata only)
 # ═══════════════════════════════════════════════════════════════
 def fetch_formats(video_url: str) -> tuple[list[dict], dict]:
     ydl_opts = {"quiet": True, "no_warnings": True, "skip_download": True}
@@ -74,7 +123,7 @@ def fetch_formats(video_url: str) -> tuple[list[dict], dict]:
 
 
 # ═══════════════════════════════════════════════════════════════
-#  YOUTUBE DOWNLOADER — actual file download
+#  VIDEO DOWNLOADER — actual file download
 # ═══════════════════════════════════════════════════════════════
 def download_video(video_url: str, format_id: str, out_dir) -> Path:
     out_dir         = Path(out_dir)
@@ -112,14 +161,14 @@ def download_video(video_url: str, format_id: str, out_dir) -> Path:
 
 
 # ═══════════════════════════════════════════════════════════════
-#  YOUTUBE DOWNLOADER — fetch and show quality keyboard
+#  VIDEO DOWNLOADER — fetch and show quality keyboard
 # ═══════════════════════════════════════════════════════════════
 async def _fetch_and_show_qualities(
-    message: aiogram_types.Message,
-    state: FSMContext,
+    message,
+    state,
     video_url: str,
     WARN_SIZE_BYTES: int,
-    BotStates: State
+    quality_state,
 ):
     status_msg = await message.answer("🔍 Fetching available qualities, please wait...")
 
@@ -129,7 +178,7 @@ async def _fetch_and_show_qualities(
     except Exception as e:
         await status_msg.edit_text(
             f"❌ <b>Failed to fetch video info.</b>\n\n<code>{str(e)[:300]}</code>\n\n"
-            "Make sure the URL is a valid, public YouTube video.",
+            "Make sure the URL is a valid, public video.",
             parse_mode="HTML"
         )
         await state.clear()
@@ -150,7 +199,7 @@ async def _fetch_and_show_qualities(
         }
         for f in formats
     ])
-    await state.set_state(BotStates.waiting_for_quality)
+    await state.set_state(quality_state)
 
     await status_msg.edit_text(
         f"🎬 <b>{title}</b>\n"
@@ -160,4 +209,3 @@ async def _fetch_and_show_qualities(
         reply_markup=build_quality_keyboard(formats, WARN_SIZE_BYTES),
         parse_mode="HTML"
     )
-

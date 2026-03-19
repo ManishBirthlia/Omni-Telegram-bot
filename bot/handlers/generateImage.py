@@ -13,7 +13,7 @@ NVIDIA_API_URL = "https://ai.api.nvidia.com/v1/genai/stabilityai/stable-diffusio
 IMAGE_DIR = Path("Generated Images")
 IMAGE_DIR.mkdir(exist_ok=True)
 
-# ── Aspect-ratio choices ─────────────────────────────────────────
+# ── Aspect-ratio choices ───────────────────────────────────────── 
 ASPECT_RATIOS = {
     "1:1":   "1:1  (Square)",
     "16:9":  "16:9  (Landscape Wide)",

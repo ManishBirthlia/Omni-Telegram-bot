@@ -7,10 +7,8 @@ import yt_dlp
 # ═══════════════════════════════════════════════════════════════
 #  CONSTANTS
 # ═══════════════════════════════════════════════════════════════
-YOUTUBE_DIR   = Path("Youtube Downloads")
-INSTAGRAM_DIR = Path("Instagram Downloads")
-YOUTUBE_DIR.mkdir(exist_ok=True)
-INSTAGRAM_DIR.mkdir(exist_ok=True)
+DOWNLOAD_DIR = Path("Video Downloads")
+DOWNLOAD_DIR.mkdir(exist_ok=True)
 
 TELEGRAM_MAX_BYTES = 50 * 1024 * 1024   # 50 MB
 
@@ -18,8 +16,8 @@ TELEGRAM_MAX_BYTES = 50 * 1024 * 1024   # 50 MB
 # ═══════════════════════════════════════════════════════════════
 #  HELPER — download best quality with yt-dlp
 #
-#  yt-dlp natively supports YouTube AND Instagram URLs.
-#  "bestvideo+bestaudio/best" grabs the highest quality available.
+#  yt-dlp natively supports YouTube, Instagram, Twitter/X,
+#  TikTok, and 1000+ other video platforms.
 # ═══════════════════════════════════════════════════════════════
 def _download_best(url: str, out_dir: str) -> Path:
     output_template = str(Path(out_dir) / "%(title)s.%(ext)s")
@@ -30,7 +28,6 @@ def _download_best(url: str, out_dir: str) -> Path:
         "outtmpl":             output_template,
         "quiet":               True,
         "no_warnings":         True,
-        # Instagram sometimes needs cookies / login — yt-dlp handles public posts fine
         "socket_timeout":      30,
     }
 
@@ -119,16 +116,15 @@ async def _deliver_file(
             parse_mode="HTML",
         )
     finally:
-        # Uncomment the line below to delete local files after delivery:
         filepath.unlink(missing_ok=True)
 
 
 # ═══════════════════════════════════════════════════════════════
-#  PUBLIC — YouTube direct download (best quality)
+#  PUBLIC — Direct download (best quality, any platform)
 # ═══════════════════════════════════════════════════════════════
-async def cmd_yt_downloader(message: aiogram_types.Message, url: str):
+async def cmd_direct_download(message: aiogram_types.Message, url: str):
     status_msg = await message.answer(
-        "⬇️ <b>Downloading YouTube video</b> (best quality)...\n"
+        "⬇️ <b>Downloading video</b> (best quality)...\n"
         "This may take a moment depending on file size.",
         parse_mode="HTML",
     )
@@ -136,7 +132,7 @@ async def cmd_yt_downloader(message: aiogram_types.Message, url: str):
     try:
         loop = asyncio.get_running_loop()
         filepath, info = await loop.run_in_executor(
-            None, _download_best, url, str(YOUTUBE_DIR)
+            None, _download_best, url, str(DOWNLOAD_DIR)
         )
     except Exception as e:
         await status_msg.edit_text(
@@ -145,32 +141,5 @@ async def cmd_yt_downloader(message: aiogram_types.Message, url: str):
         )
         return
 
-    title = info.get("title", "YouTube Video")
-    await _deliver_file(message, filepath, status_msg, title)
-
-
-# ═══════════════════════════════════════════════════════════════
-#  PUBLIC — Instagram direct download (best quality)
-# ═══════════════════════════════════════════════════════════════
-async def cmd_insta_downloader(message: aiogram_types.Message, url: str):
-    status_msg = await message.answer(
-        "⬇️ <b>Downloading Instagram video</b> (best quality)...\n"
-        "This may take a moment.",
-        parse_mode="HTML",
-    )
-
-    try:
-        loop = asyncio.get_running_loop()
-        filepath, info = await loop.run_in_executor(
-            None, _download_best, url, str(INSTAGRAM_DIR)
-        )
-    except Exception as e:
-        await status_msg.edit_text(
-            f"❌ <b>Download failed.</b>\n\n<code>{str(e)[:300]}</code>\n\n"
-            "<i>Note: Private Instagram posts cannot be downloaded.</i>",
-            parse_mode="HTML",
-        )
-        return
-
-    title = info.get("title", "Instagram Video")
+    title = info.get("title", "Video")
     await _deliver_file(message, filepath, status_msg, title)

@@ -1,0 +1,7 @@
+# Merge Downloaders into Unified /downloader
+
+- [ ] Create `videoDownloader.py` (rename + add `validate_video_url`)
+- [ ] Delete [instaDownloader.py](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/handlers/instaDownloader.py)
+- [ ] Merge [directDownloader.py](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/handlers/directDownloader.py) into single function
+- [ ] Update [main.py](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/main.py) — unified command, FSM states, imports, help text
+- [ ] Verify the code runs without import errors

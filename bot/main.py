@@ -16,12 +16,12 @@ from dotenv import load_dotenv
 from groq import Groq
 from handlers.chat import groq_AI_chatting, nvidia_AI_chatting
 from utilities import cancel_if_command, upload_to_gofile_async
-from handlers.ytDownloader import download_video, fetch_formats, build_quality_keyboard, _fetch_and_show_qualities
-from handlers.instaDownloader import (
-    download_video      as insta_download_video,
-    fetch_formats       as insta_fetch_formats,
-    build_quality_keyboard as insta_build_quality_keyboard,
-    _fetch_and_show_qualities as insta_fetch_and_show_qualities,
+from handlers.videoDownloader import (
+    validate_video_url,
+    download_video,
+    fetch_formats,
+    build_quality_keyboard,
+    _fetch_and_show_qualities,
 )
 from handlers.generateVideo import start_video_generation
 from handlers.generateImage import (
@@ -30,17 +30,10 @@ from handlers.generateImage import (
     build_img_quality_keyboard,
     build_neg_prompt_keyboard,
 )
-from handlers.directDownloader import cmd_yt_downloader, cmd_insta_downloader
+from handlers.directDownloader import cmd_direct_download
 
-# ── URL patterns for YouTube & Instagram ──────────────────────
-_YT_RE = re.compile(
-    r"https?://(?:www\.|m\.|music\.)?(?:youtube\.com|youtu\.be)/?\S*",
-    re.IGNORECASE,
-)
-_IG_RE = re.compile(
-    r"https?://(?:www\.|m\.)?instagram\.com/\S*",
-    re.IGNORECASE,
-)
+# ── URL pattern — matches any http(s) link ─────────────────────
+_URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
 
 load_dotenv()
 
@@ -54,10 +47,8 @@ nvidia_client = OpenAI(
 #  FSM STATE GROUP
 class BotStates(StatesGroup):
     chatting                 = State()   # /chat flow
-    waiting_for_url          = State()   # /ytDownloader — step 1
-    waiting_for_quality      = State()   # /ytDownloader — step 2
-    insta_waiting_for_url    = State()   # /instaDownloader — step 1
-    insta_waiting_for_quality = State()  # /instaDownloader — step 2
+    dl_waiting_for_url       = State()   # /downloader — step 1
+    dl_waiting_for_quality   = State()   # /downloader — step 2
     Video_prompt             = State()   # /generateVideo — step 1
     Audio_prompt             = State()   # /generateVideo — step 2
     Image_prompt             = State()   # /generateImage — step 1: prompt
@@ -84,8 +75,7 @@ DEFAULT_VID_TOPIC  = "A child sleeping and dreaming of counting sheep up to 10"
 SYSTEM_INSTRUCTION = """
 You are an AI assistant for Omni AI, a multi-purpose Telegram bot designed to be a personal Swiss Army knife. Instead of switching between 10 apps or websites, you message one bot and get things done:
 
-- 📥 Paste a YouTube link → get the video downloaded to your phone
-- 📸 Paste an Instagram link → get the reel/post saved instantly
+- 📥 Paste a video link (YouTube, Instagram, Twitter/X, TikTok, …) → get the video downloaded
 - 🎬 Describe a scene → get an AI-generated video
 - 💬 Ask a question → get an AI-powered answer (Groq/LLaMA/Nvidia)
 - 🎙️ Send audio → get a full transcription
@@ -98,8 +88,7 @@ The vision: One bot that keeps getting smarter. Every useful tool you wish exist
 Available bot commands the user can use:
 /start — Initialize the bot and authenticate
 /chat — General chat with the AI assistant
-/ytDownloader — Download a video from YouTube by providing a link
-/instaDownloader — Download a video from Instagram by providing a link
+/downloader — Download a video from YouTube, Instagram, Twitter/X, TikTok, and 1000+ sites
 /generateAudio — Generate a single audio clip based on a prompt
 /generateImage — Generate a single image based on a prompt
 /generateVideo — Start a new single video generation
@@ -121,13 +110,11 @@ Always be helpful, friendly, and keep responses focused and actionable.
 
 HELP_TEXT = """
 🤖 <b>Bot Commands</b>
-
 /start — Initialize the bot and authenticate
 /chat — General chat with the AI assistant
-/ytDownloader — Download a YouTube video (choose quality)
-/instaDownloader — Download a video from Instagram by providing a link
-/generateAudio — Generate a single audio clip from a prompt
+/downloader — Download video (YouTube, Instagram, Twitter/X, TikTok, …)
 /generateImage — Generate a single image from a prompt
+/generateAudio — Generate a single audio clip from a prompt
 /generateVideo — Start a new single video generation
 /transcribe — Transcribe audio or a video link to text
 /status — Check status of all running jobs
@@ -140,6 +127,7 @@ HELP_TEXT = """
 /history — View last 10 completed jobs with video links
 /settings — Configure default preferences
 /help — Show all commands
+
 """
 
 #  /start
@@ -147,13 +135,14 @@ HELP_TEXT = """
 async def cmd_start(message: aiogram_types.Message, state: FSMContext):
     await state.clear()
     await message.reply(
-        "👋 <b>Welcome to the AI Kids Cartoon Generator Bot!</b>\n\n"
+        "👋 <b>Welcome to Omni Bot!</b>\n\n"
         "I can help you with:\n"
-        "🎬 Script writing & video generation\n"
-        "🖼️ Scene & image prompts\n"
-        "🔧 Pipeline code & setup\n"
+        "🎬 Video Downloader\n"
+        "🖼️ Image generation\n"
+        "🔧 Video generation\n"
+        "🎙️ Audio transcription\n"
         "📤 YouTube upload automation\n\n"
-        "Type /generateVideo to create a video, or /help for all commands.",
+        "Type /help for all commands.",
         parse_mode="HTML"
     )
 
@@ -176,9 +165,9 @@ async def receive_chat_message(message: aiogram_types.Message, state: FSMContext
 
 
 # ═══════════════════════════════════════════════════════════════
-#  /ytDownloader — entry
+#  /downloader — unified entry (YouTube, Instagram, Twitter/X, …)
 # ═══════════════════════════════════════════════════════════════
-@dp.message(Command("ytDownloader"))
+@dp.message(Command("downloader"))
 async def cmd_downloader(
     message: aiogram_types.Message,
     command: CommandObject,
@@ -188,46 +177,85 @@ async def cmd_downloader(
 
     if command.args:
         video_url = command.args.strip()
+        # Quick URL format check
+        if not video_url.startswith(("http://", "https://")):
+            await message.answer(
+                "⚠️ That doesn't look like a valid URL.\n"
+                "Please provide a full link starting with <code>https://</code>",
+                parse_mode="HTML",
+            )
+            return
+        # Validate with yt-dlp
+        valid, info = validate_video_url(video_url)
+        if not valid:
+            await message.answer(
+                "❌ <b>This URL is not a supported video link.</b>\n\n"
+                "I support YouTube, Instagram, Twitter/X, TikTok, and "
+                "<b>1 000+ other video platforms</b>.\n\n"
+                f"<code>{info[:200]}</code>",
+                parse_mode="HTML",
+            )
+            return
         await state.update_data(url=video_url)
-        await _fetch_and_show_qualities(message, state, video_url, WARN_SIZE_BYTES, BotStates)
+        await _fetch_and_show_qualities(
+            message, state, video_url, WARN_SIZE_BYTES,
+            BotStates.dl_waiting_for_quality,
+        )
         return
 
-    await state.set_state(BotStates.waiting_for_url)
+    await state.set_state(BotStates.dl_waiting_for_url)
     await message.answer(
-        "📥 <b>YouTube Downloader</b>\n\n"
-        "Please send the YouTube video URL you want to download.\n\n"
-        "<i>Example:</i>\n"
-        "<code>https://www.youtube.com/watch?v=abcd</code>",
-        parse_mode="HTML"
+        "📥 <b>Video Downloader</b>\n\n"
+        "Send me a video URL from <b>YouTube, Instagram, Twitter/X, "
+        "TikTok</b>, or any other supported platform.\n\n"
+        "<i>Examples:</i>\n"
+        "<code>https://www.youtube.com/watch?v=abcd</code>\n"
+        "<code>https://www.instagram.com/reel/ABC123/</code>\n"
+        "<code>https://x.com/user/status/123456</code>",
+        parse_mode="HTML",
     )
 
-@dp.message(BotStates.waiting_for_url)
+
+@dp.message(BotStates.dl_waiting_for_url)
 async def receive_download_url(message: aiogram_types.Message, state: FSMContext):
-    if await cancel_if_command(message, state, resume_command="/ytDownloader"):
+    if await cancel_if_command(message, state, resume_command="/downloader"):
         return
 
     video_url = (message.text or "").strip()
     if not video_url.startswith(("http://", "https://")):
         await message.answer(
             "⚠️ That doesn't look like a valid URL.\n"
-            "Please send a full YouTube link starting with <code>https://</code>",
-            parse_mode="HTML"
+            "Please send a full video link starting with <code>https://</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    # Validate with yt-dlp
+    valid, info = validate_video_url(video_url)
+    if not valid:
+        await message.answer(
+            "❌ <b>This URL is not a supported video link.</b>\n\n"
+            "I support YouTube, Instagram, Twitter/X, TikTok, and "
+            "<b>1 000+ other video platforms</b>.\n\n"
+            f"<code>{info[:200]}</code>",
+            parse_mode="HTML",
         )
         return
 
     await state.update_data(url=video_url)
-    await _fetch_and_show_qualities(message, state, video_url, WARN_SIZE_BYTES, BotStates)
+    await _fetch_and_show_qualities(
+        message, state, video_url, WARN_SIZE_BYTES,
+        BotStates.dl_waiting_for_quality,
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
-#  /ytDownloader — quality selected
-#
-#  After download, decision tree:
+#  /downloader — quality selected
 #
 #  file_size ≤ 50 MB  →  send directly via Telegram
 #  file_size  > 50 MB →  upload to gofile.io → send link
 # ═══════════════════════════════════════════════════════════════
-@dp.callback_query(BotStates.waiting_for_quality, F.data.startswith("dl_quality:"))
+@dp.callback_query(BotStates.dl_waiting_for_quality, F.data.startswith("dl_quality:"))
 async def receive_quality_choice(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
@@ -241,7 +269,7 @@ async def receive_quality_choice(callback: CallbackQuery, state: FSMContext):
     data      = await state.get_data()
     video_url = data.get("url")
     if not video_url:
-        await callback.message.edit_text("⚠️ Session expired. Please use /ytDownloader again.")
+        await callback.message.edit_text("⚠️ Session expired. Please use /downloader again.")
         await state.clear()
         return
 
@@ -251,19 +279,19 @@ async def receive_quality_choice(callback: CallbackQuery, state: FSMContext):
     status_msg = await callback.message.edit_text(
         f"⬇️ <b>Downloading...</b>  [{quality_label}]\n"
         "This may take a moment depending on file size.",
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
 
     # ── Download the file ─────────────────────────────────────
     try:
         loop     = asyncio.get_running_loop()
         filepath = await loop.run_in_executor(
-            None, download_video, video_url, choice, str(DOWNLOAD_DIR)
+            None, download_video, video_url, choice, str(DOWNLOAD_DIR),
         )
     except Exception as e:
         await status_msg.edit_text(
             f"❌ <b>Download failed.</b>\n\n<code>{str(e)[:300]}</code>",
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
         return
 
@@ -272,30 +300,28 @@ async def receive_quality_choice(callback: CallbackQuery, state: FSMContext):
 
     try:
         if file_size <= TELEGRAM_MAX_BYTES:
-            # ── Under 50 MB: send directly to Telegram ───────
             await status_msg.edit_text(
                 f"📤 <b>Uploading to Telegram...</b>  ({size_mb:.1f} MB)",
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
             if choice == "audio_only":
                 await callback.message.answer_audio(
                     audio=FSInputFile(filepath),
-                    caption=f"🎵 Here's your audio!  ({size_mb:.1f} MB)"
+                    caption=f"🎵 Here's your audio!  ({size_mb:.1f} MB)",
                 )
             else:
                 await callback.message.answer_video(
                     video=FSInputFile(filepath),
                     caption=f"🎬 Here's your video!  ({size_mb:.1f} MB)",
-                    supports_streaming=True
+                    supports_streaming=True,
                 )
             await status_msg.delete()
 
         else:
-            # ── Over 50 MB: upload to gofile.io, send link ───
             await status_msg.edit_text(
                 f"📦 <b>File is {size_mb:.1f} MB</b> — too large for Telegram.\n"
                 "☁️ Uploading to gofile.io, please wait...",
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
             download_link = await upload_to_gofile_async(filepath)
             await status_msg.edit_text(
@@ -304,152 +330,16 @@ async def receive_quality_choice(callback: CallbackQuery, state: FSMContext):
                 f"🔗 <a href='{download_link}'>Click here to download</a>\n\n"
                 "<i>Hosted on gofile.io — expires after 10 days of inactivity.</i>",
                 parse_mode="HTML",
-                disable_web_page_preview=True
+                disable_web_page_preview=True,
             )
 
     except Exception as e:
         await status_msg.edit_text(
             f"❌ <b>Failed to deliver file.</b>\n<code>{str(e)[:200]}</code>",
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
     finally:
-        filepath.unlink(missing_ok=True)   # always delete local file
-
-# ═══════════════════════════════════════════════════════════════
-#  /instaDownloader — entry
-# ═══════════════════════════════════════════════════════════════
-@dp.message(Command("instaDownloader"))
-async def cmd_insta_downloader(
-    message: aiogram_types.Message,
-    command: CommandObject,
-    state: FSMContext,
-):
-    await state.clear()
-
-    if command.args:
-        video_url = command.args.strip()
-        await state.update_data(url=video_url)
-        await insta_fetch_and_show_qualities(message, state, video_url, WARN_SIZE_BYTES, BotStates)
-        return
-
-    await state.set_state(BotStates.insta_waiting_for_url)
-    await message.answer(
-        "📥 <b>Instagram Downloader</b>\n\n"
-        "Please send the Instagram post / reel URL you want to download.\n\n"
-        "<i>Example:</i>\n"
-        "<code>https://www.instagram.com/reel/ABC123/</code>",
-        parse_mode="HTML"
-    )
-
-@dp.message(BotStates.insta_waiting_for_url)
-async def receive_insta_download_url(message: aiogram_types.Message, state: FSMContext):
-    if await cancel_if_command(message, state, resume_command="/instaDownloader"):
-        return
-
-    video_url = (message.text or "").strip()
-    if not video_url.startswith(("http://", "https://")):
-        await message.answer(
-            "⚠️ That doesn't look like a valid URL.\n"
-            "Please send a full Instagram link starting with <code>https://</code>",
-            parse_mode="HTML"
-        )
-        return
-
-    await state.update_data(url=video_url)
-    await insta_fetch_and_show_qualities(message, state, video_url, WARN_SIZE_BYTES, BotStates)
-
-
-# ═══════════════════════════════════════════════════════════════
-#  /instaDownloader — quality selected
-#
-#  file_size ≤ 50 MB  →  send directly via Telegram
-#  file_size  > 50 MB →  upload to gofile.io → send link
-# ═══════════════════════════════════════════════════════════════
-@dp.callback_query(BotStates.insta_waiting_for_quality, F.data.startswith("insta_dl_quality:"))
-async def receive_insta_quality_choice(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-
-    choice = callback.data.split(":", 1)[1]
-
-    if choice == "cancel":
-        await callback.message.edit_text("❌ Download cancelled.")
-        await state.clear()
-        return
-
-    data      = await state.get_data()
-    video_url = data.get("url")
-    if not video_url:
-        await callback.message.edit_text("⚠️ Session expired. Please use /instaDownloader again.")
-        await state.clear()
-        return
-
-    await state.clear()
-
-    quality_label = "Audio Only (MP3)" if choice == "audio_only" else f"quality {choice}"
-    status_msg = await callback.message.edit_text(
-        f"⬇️ <b>Downloading...</b>  [{quality_label}]\n"
-        "This may take a moment depending on file size.",
-        parse_mode="HTML"
-    )
-
-    # ── Download the file ─────────────────────────────────────
-    try:
-        loop     = asyncio.get_running_loop()
-        filepath = await loop.run_in_executor(
-            None, insta_download_video, video_url, choice, str(DOWNLOAD_DIR)
-        )
-    except Exception as e:
-        await status_msg.edit_text(
-            f"❌ <b>Download failed.</b>\n\n<code>{str(e)[:300]}</code>",
-            parse_mode="HTML"
-        )
-        return
-
-    file_size = filepath.stat().st_size
-    size_mb   = file_size / 1_048_576
-
-    try:
-        if file_size <= TELEGRAM_MAX_BYTES:
-            await status_msg.edit_text(
-                f"📤 <b>Uploading to Telegram...</b>  ({size_mb:.1f} MB)",
-                parse_mode="HTML"
-            )
-            if choice == "audio_only":
-                await callback.message.answer_audio(
-                    audio=FSInputFile(filepath),
-                    caption=f"🎵 Here's your audio!  ({size_mb:.1f} MB)"
-                )
-            else:
-                await callback.message.answer_video(
-                    video=FSInputFile(filepath),
-                    caption=f"📸 Here's your Instagram video!  ({size_mb:.1f} MB)",
-                    supports_streaming=True
-                )
-            await status_msg.delete()
-
-        else:
-            await status_msg.edit_text(
-                f"📦 <b>File is {size_mb:.1f} MB</b> — too large for Telegram.\n"
-                "☁️ Uploading to gofile.io, please wait...",
-                parse_mode="HTML"
-            )
-            download_link = await upload_to_gofile_async(filepath)
-            await status_msg.edit_text(
-                f"✅ <b>Your file is ready!</b>\n\n"
-                f"📦 <b>Size:</b> {size_mb:.1f} MB\n"
-                f"🔗 <a href='{download_link}'>Click here to download</a>\n\n"
-                "<i>Hosted on gofile.io — expires after 10 days of inactivity.</i>",
-                parse_mode="HTML",
-                disable_web_page_preview=True
-            )
-
-    except Exception as e:
-        await status_msg.edit_text(
-            f"❌ <b>Failed to deliver file.</b>\n<code>{str(e)[:200]}</code>",
-            parse_mode="HTML"
-        )
-    finally:
-        filepath.unlink(missing_ok=True)   # always delete local file
+        filepath.unlink(missing_ok=True)
 
 # ═══════════════════════════════════════════════════════════════
 #  /generateVideo
@@ -626,17 +516,21 @@ async def cmd_help(message: aiogram_types.Message, state: FSMContext):
 async def handle_no_state_text(message: aiogram_types.Message, state: FSMContext):
     if await state.get_state() is not None:
         return
-    
-    video_url = (message.text or "").strip()
-    if _YT_RE.match(video_url):
-        await cmd_yt_downloader(message, video_url)
-    elif _IG_RE.match(video_url):
-        await cmd_insta_downloader(message, video_url)
-    else:
-        await message.answer(
-            "💬 It looks like you want to chat!\n"
-            "Use /chat to start a conversation with me."
-        )
+
+    text = (message.text or "").strip()
+
+    # Auto-detect video URLs and download directly (best quality)
+    if _URL_RE.match(text):
+        valid, _ = validate_video_url(text)
+        if valid:
+            await cmd_direct_download(message, text)
+            return
+
+    await message.answer(
+        "💬 It looks like you want to chat!\n"
+        "Use /chat to start a conversation with me.\n"
+        "Or Use /help to see all commands."
+    )
 
 #  ENTRY POINT — graceful shutdown
 async def main():
