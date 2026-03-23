@@ -24,6 +24,7 @@ from handlers.videoDownloader import (
     _fetch_and_show_qualities,
 )
 from handlers.generateVideo import start_video_generation
+from handlers.generateAudio import start_audio_generation
 from handlers.generateImage import (
     generate_image,
     build_aspect_ratio_keyboard,
@@ -379,6 +380,44 @@ async def receive_video_topic(message: aiogram_types.Message, state: FSMContext)
         return
     await state.clear()
     await start_video_generation(message, topic, STORAGE_DIR, LTX_API_URL)
+
+# ═══════════════════════════════════════════════════════════════
+#  /generateAudio
+# ═══════════════════════════════════════════════════════════════
+@dp.message(Command("generateAudio"))
+async def cmd_generate_audio(
+    message: aiogram_types.Message,
+    command: CommandObject,
+    state: FSMContext,
+):
+    await state.clear()
+
+    if command.args:
+        prompt = command.args.strip()
+        await start_audio_generation(message, prompt, STORAGE_DIR)
+        return
+
+    await state.set_state(BotStates.Audio_prompt)
+    await message.answer(
+        "🎙️ <b>Audio Generation</b>\n\n"
+        "What should the audio say? You can also add non-speech sounds like [laughs], [sighs], etc.\n\n"
+        "<b>Examples:</b>\n"
+        "• Hello, my name is Suno. And, uh — and I like pizza. [laughs]\n"
+        "• A very professional announcement regarding our flight.\n\n"
+        "<i>Type your script below 👇</i>",
+        parse_mode="HTML"
+    )
+
+@dp.message(BotStates.Audio_prompt)
+async def receive_audio_prompt(message: aiogram_types.Message, state: FSMContext):
+    if await cancel_if_command(message, state, resume_command="/generateAudio"):
+        return
+    prompt = (message.text or "").strip()
+    if not prompt:
+        await message.answer("Please enter some text to generate audio.")
+        return
+    await state.clear()
+    await start_audio_generation(message, prompt, STORAGE_DIR)
 
 # ═══════════════════════════════════════════════════════════════
 #  /generateImage  (prompt → aspect ratio → quality → neg prompt)

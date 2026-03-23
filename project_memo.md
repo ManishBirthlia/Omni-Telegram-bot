@@ -1,11 +1,26 @@
 # 📋 Omni Telegram Bot — Project Memo
 
-**Date:** March 17–18, 2026 (Monday night session)
-**Commits today:** 5 | **Files changed:** 16 | **Lines added:** ~1,169
+**Date:** March 19, 2026
+**Commits recent:** 6 | **Files changed:** 11 | **Lines added:** ~640
 
 ---
 
-## ✅ Today's Completed Work
+## ✅ Recent Completed Work (March 19)
+
+### 1. Unified Downloader & Link Detection *(NEW)*
+- Merged `instaDownloader.py` and `ytDownloader.py` into a unified `videoDownloader.py` using yt-dlp.
+- Added automatic link detection for YouTube, Instagram, Twitter/X, TikTok, etc. (no command needed).
+- Removed `instaDownloader.py`.
+
+### 2. Video Generation
+- Integrated actual API call logic into `generateVideo.py` using the LTX Video API.
+
+### 3. Polish
+- Implemented `/help` command displaying all available commands.
+
+---
+
+## ✅ Previously Completed Work (March 17-18)
 
 ### 1. Image Generation Feature *(NEW)*
 - Built `/imagine` command with **NVIDIA Picasso API** integration
@@ -38,9 +53,9 @@
 ## 📌 Tomorrow's Tasks
 
 ### Priority 1 — Core Features
-- [ ] **Instagram Downloader** — finish [instaDownloader.py](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/handlers/instaDownloader.py) (currently empty/stub)
+- [x] **Instagram Downloader** — replaced by unified `videoDownloader.py`
 - [ ] **Transcription handler** — verify [transcribe.py](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/handlers/transcribe.py) is working end-to-end
-- [ ] **Video Generation** — test [generateVideo.py](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/handlers/generateVideo.py) flow with real API calls
+- [x] **Video Generation** — integrated real LTX-api calls in [generateVideo.py](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/bot/handlers/generateVideo.py)
 
 ### Priority 2 — Robustness
 - [ ] **Conversation memory** for `/chat` — maintain chat history per user session instead of single-turn
@@ -48,11 +63,11 @@
 - [ ] **Error reporting** — log errors to a file or channel instead of just `print()`
 
 ### Priority 3 — DevOps
-- [ ] **[.env.example](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/.env.example)** — create a template so new devs know which keys are needed
+- [ ] **[.env.example](file:///d:/My%20Business/My%20Projects/On-Going/Omni%20Telegram%20Bot/.env.example)** — update template and remove outdated keys (contains legacy `kidstoon` variables)
 - [ ] **Test the Docker setup** — `docker compose up` and verify all services start
 - [ ] **CI/CD pipeline** — GitHub Actions for lint + build on push
 
 ### Priority 4 — Polish
-- [ ] **`/help` command** — list all available commands with descriptions
+- [x] **`/help` command** — implemented
 - [ ] **Typing indicator** — show "typing…" while waiting for AI responses
 - [ ] **README update** — add screenshots, setup instructions, and architecture diagram
