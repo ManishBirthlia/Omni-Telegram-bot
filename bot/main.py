@@ -45,7 +45,9 @@ nvidia_client = OpenAI(
   base_url = "https://integrate.api.nvidia.com/v1",
   api_key = os.getenv("NVIDIA_CHAT_API_KEY")
 ) 
-whisper_client = whisper.load_model("small")
+import torch
+device = "cuda" if torch.cuda.is_available() else "cpu"
+whisper_client = whisper.load_model("small", device=device)
 # openai_client = OpenAI()
 
 #  FSM STATE GROUP

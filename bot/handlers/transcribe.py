@@ -64,8 +64,8 @@ async def process_transcription(message: aiogram_types.Message, file_id: str, bo
             await status_msg.edit_text("❌ <b>Transcription failed or audio is empty.</b>", parse_mode="HTML")
             return
 
-        await status_msg.edit_text("📝 <b>Generating summary...</b>", parse_mode="HTML")
-        summary = await summarize_text(transcript, nvidia_client)
+        # await status_msg.edit_text("📝 <b>Generating summary...</b>", parse_mode="HTML")
+        # summary = await summarize_text(transcript, nvidia_client)
         
         # Send transcript (if long, send as file)
         if len(transcript) > 4000:
@@ -83,7 +83,7 @@ async def process_transcription(message: aiogram_types.Message, file_id: str, bo
             safe_transcript = html.escape(transcript)
             await message.answer(f"📄 <b>Transcription:</b>\n\n{safe_transcript}", parse_mode="HTML")
             
-        await message.answer(f"💡 <b>Summary:</b>\n\n{summary}", parse_mode="HTML")
+        # await message.answer(f"💡 <b>Summary:</b>\n\n{summary}", parse_mode="HTML")
         await status_msg.delete()
         
     except Exception as e:
