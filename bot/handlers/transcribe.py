@@ -8,15 +8,18 @@ from aiogram.types import FSInputFile
 async def transcribe_audio(file_path, whisper_client):
     """Transcribe audio file using Whisper"""
     try:
-        with open(file_path, "rb") as audio_file:
-            # Using response_format="text" usually returns a string, 
-            # but we'll handle both cases for robustness.
-            response = await whisper_client.transcribe(audio_file, task="translate", language="en")
+        # Local whisper.transcribe is synchronous and expects a string path or ndarray.
+        # We run it in a thread to avoid blocking the event loop.
+        result = await asyncio.to_thread(
+            whisper_client.transcribe,
+            str(file_path),
+            task="translate",
+            language="en"
+        )
         
-        # If the response is a transcription object, extract the text
-        if hasattr(response, 'text'):
-            return response.text
-        return str(response)
+        if isinstance(result, dict) and 'text' in result:
+            return result['text']
+        return str(result)
     except Exception as e:
         print(f"Transcription error: {e}")
         return None
