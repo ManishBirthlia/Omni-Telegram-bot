@@ -1,27 +1,16 @@
 # Project Status – AutoYTube.AI (as of 2026-02-28)
 
 ## ✅ Completed Steps
-- Created starter project skeleton with key files:
-  - `Dockerfile`
-  - `docker-compose.yml` & `docker-compose.prod.yml`
-  - `.env.example`
-  - `requirements.txt`
-  - Minimal bot entry point (`bot/main.py`)
-- Basic Telegram bot activity implemented (commands, message handling)
-  - Celery app and placeholder task modules (`workers/*.py`)
-  - SQLAlchemy model (`models/pipeline_job.py`)
-  - Kubernetes deployment manifest (`k8s/deployment.yaml`)
-- Added initial documentation in `README.md` (already present in repo).
-- Provided a step‑by‑step guide for:
-  - Installing Python 3.11 and setting up a virtual environment
-  - Installing dependencies
-  - Preparing `.env`
-  - Starting Redis/Postgres via Docker Compose
-  - Running the bot and a Celery worker
-- Fixed `requirements.txt` version conflict for `elevenlabs`.
-
-## 🛠️ Work In Progress
-- None yet – the skeleton is ready for the next development phase.
+- Created starter project skeleton with key files (Dockerfile, Compose, .env, etc.)
+- Basic Telegram bot activity implemented (commands, FSM context)
+- **Local AI Migration**:
+  - Integrated **OpenAI Whisper** (Local) for high-speed transcription on GPU.
+  - Integrated **Suno Bark** (Local) for text-to-audio with non-speech tags.
+  - Enabled **CUDA** acceleration for NVIDIA GTX 1660 Ti.
+  - Implemented **Text Chunking & Merging** for long audio generation.
+  - Added **Audio-to-Audio** generation flow.
+- Unified Downloader for YouTube, Instagram, and more using `yt-dlp`.
+- Large file support via GoFile API.
 
 ## 📋 Next Steps (to continue tomorrow)
 1. **Implement real bot commands** (`/generate`, `/series`, etc.) in `bot/handlers/`.

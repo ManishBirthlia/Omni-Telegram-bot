@@ -1,16 +1,38 @@
 # 📋 Omni Telegram Bot — Project Memo
 
-**Date:** March 19, 2026
-**Commits recent:** 6 | **Files changed:** 11 | **Lines added:** ~640
+**Date:** March 27, 2026
+**Commits recent:** 11 | **Files changed:** 15 | **Lines added:** ~1200
 
 ---
 
-## ✅ Recent Completed Work (March 19)
+## ✅ Recent Completed Work (March 26-27)
 
-### 1. Unified Downloader & Link Detection *(NEW)*
-- Merged `instaDownloader.py` and `ytDownloader.py` into a unified `videoDownloader.py` using yt-dlp.
-- Added automatic link detection for YouTube, Instagram, Twitter/X, TikTok, etc. (no command needed).
-- Removed `instaDownloader.py`.
+### 1. Local AI Migration & GPU Acceleration *(MAJOR)*
+- Migrated **Whisper** (Transcription) and **Bark** (Audio Generation) to run locally on **NVIDIA GTX 1660 Ti**.
+- Enabled **CUDA** support for both models, significantly improving performance and removing the "FP16 not supported on CPU" warnings.
+- Fixed PyTorch 2.6 security restrictions by monkey-patching `torch.load` for legacy model files.
+
+### 2. Enhanced Audio Generation (Suno Bark)
+- **Smart Chunking**: Implemented automatic text splitting (~150 chars) and audio merging (`numpy.concatenate`) to bypass Bark's 14-second limit.
+- **Audio-to-Audio**: Integrated transcription into the audio generation flow — users can now send voice notes to be "re-spoken" by AI.
+- **Non-speech Tags**: Added support and documentation for tags like `[laughs]`, `[clears throat]`, etc.
+
+### 3. Transcription Fixes
+- Resolved `Transcription error: expected np.ndarray (got _io.BufferedReader)` bug by passing file paths and using `asyncio.to_thread`.
+- Verified end-to-end local transcription working on GPU.
+
+---
+
+## ✅ Previously Completed Work (March 19)
+
+### 1. Unified Downloader & Merged Command *(UPDATE)*
+- Merged YouTube and Instagram downloaders into a single `/downloader` command.
+- Automatically handles any supported video link (YouTube, Instagram, Twitter/X, TikTok, etc.).
+
+### 2. Advanced AI Chat (Groq & NVIDIA)
+- Updated `/chat` to use state-of-the-art models:
+  - **Groq**: `llama-3.3-70b-versatile`
+  - **NVIDIA**: `nvidia/nemotron-3-nano-30b-a3b`
 
 ### 2. Video Generation
 - Integrated actual API call logic into `generateVideo.py` using the LTX Video API.
