@@ -3,6 +3,7 @@ import re
 import asyncio
 import yt_dlp
 import requests
+import whisper
 from openai import OpenAI
 from pathlib import Path
 from aiogram.types import FSInputFile
@@ -32,6 +33,7 @@ from handlers.generateImage import (
     build_neg_prompt_keyboard,
 )
 from handlers.directDownloader import cmd_direct_download
+from handlers.transcribe import process_transcription
 
 # ── URL pattern — matches any http(s) link ─────────────────────
 _URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
@@ -43,7 +45,8 @@ nvidia_client = OpenAI(
   base_url = "https://integrate.api.nvidia.com/v1",
   api_key = os.getenv("NVIDIA_CHAT_API_KEY")
 ) 
-# openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+whisper_client = whisper.load_model("small")
+# openai_client = OpenAI()
 
 #  FSM STATE GROUP
 class BotStates(StatesGroup):
@@ -56,6 +59,7 @@ class BotStates(StatesGroup):
     Image_aspect_ratio       = State()   # /generateImage — step 2: aspect ratio
     Image_quality            = State()   # /generateImage — step 3: quality
     Image_negative           = State()   # /generateImage — step 4: negative prompt
+    transcribe_waiting       = State()   # /transcribe — waiting for audio
 
 #  BOT & DISPATCHER
 bot = Bot(token=os.getenv("TELEGRAM_BOT_TOKEN"))
@@ -380,6 +384,30 @@ async def receive_video_topic(message: aiogram_types.Message, state: FSMContext)
         return
     await state.clear()
     await start_video_generation(message, topic, STORAGE_DIR, LTX_API_URL)
+
+# ═══════════════════════════════════════════════════════════════
+#  /transcribe
+# ═══════════════════════════════════════════════════════════════
+@dp.message(Command("transcribe"))
+async def cmd_transcribe(message: aiogram_types.Message, state: FSMContext):
+    await state.clear()
+    await state.set_state(BotStates.transcribe_waiting)
+    await message.answer(
+        "🎙️ <b>Audio Transcription</b>\n\n"
+        "Please send me a <b>voice note</b> or an <b>audio file</b> to transcribe.\n"
+        "I will provide the full text and a concise summary.",
+        parse_mode="HTML"
+    )
+
+@dp.message(BotStates.transcribe_waiting, F.voice | F.audio)
+async def receive_transcription_audio(message: aiogram_types.Message, state: FSMContext):
+    file_id = message.voice.file_id if message.voice else message.audio.file_id
+    await state.clear()
+    await process_transcription(message, file_id, bot, whisper_client, nvidia_client)
+
+@dp.message(BotStates.transcribe_waiting)
+async def invalid_transcription_input(message: aiogram_types.Message):
+    await message.answer("⚠️ Please send an <b>audio file</b> or a <b>voice note</b>.")
 
 # ═══════════════════════════════════════════════════════════════
 #  /generateAudio

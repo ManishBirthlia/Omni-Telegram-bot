@@ -14,20 +14,32 @@ from aiogram.types import FSInputFile
 from bark import SAMPLE_RATE, generate_audio as bark_generate_audio, preload_models
 from scipy.io.wavfile import write as write_wav
 
-# Keep track of models to avoid reloading unnecessarily, although preload_models handles this
+# Keep track of models to avoid reloading unnecessarily
 _models_loaded = False
+_device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def _blocking_generate_audio(prompt: str, audio_path: str):
-    global _models_loaded
+    global _models_loaded, _device
+    
     if not _models_loaded:
-        # PyTorch 2.6 flipped weights_only=True by default, which blocks bark's
-        # checkpoint loading. We explicitly allowlist the numpy type bark uses.
+        print(f"🎙️ Loading Bark models on: {_device.upper()}")
+        # PyTorch 2.6 security patch
         torch.serialization.add_safe_globals([numpy.core.multiarray.scalar])
-        # download and load all models
-        preload_models()
+        
+        # Preload models with optimization for smaller GPUs (like GTX 1660 Ti 6GB)
+        preload_models(
+            text_use_gpu=(_device == "cuda"),
+            text_use_small=True,
+            coarse_use_gpu=(_device == "cuda"),
+            coarse_use_small=True,
+            fine_use_gpu=(_device == "cuda"),
+            fine_use_small=True,
+            codec_use_gpu=(_device == "cuda")
+        )
         _models_loaded = True
         
     # generate audio from text
+    print(f"🎙️ Generating audio on {_device.upper()}...")
     audio_array = bark_generate_audio(prompt)
 
     # save audio to disk
