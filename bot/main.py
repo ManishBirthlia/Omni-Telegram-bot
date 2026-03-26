@@ -33,7 +33,7 @@ from handlers.generateImage import (
     build_neg_prompt_keyboard,
 )
 from handlers.directDownloader import cmd_direct_download
-from handlers.transcribe import process_transcription
+from handlers.transcribe import process_transcription, transcribe_audio
 
 # ── URL pattern — matches any http(s) link ─────────────────────
 _URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
@@ -428,15 +428,52 @@ async def cmd_generate_audio(
         return
 
     await state.set_state(BotStates.Audio_prompt)
+    tags_list = (
+        "• <code>[laughs]</code>\n"
+        "• <code>[sighs]</code>\n"
+        "• <code>[music]</code>\n"
+        "• <code>[clears throat]</code>\n"
+        "• <code>[hesitation]</code>\n"
+        "• <code>—</code> or <code>...</code> (for pauses)\n"
+    )
     await message.answer(
-        "🎙️ <b>Audio Generation</b>\n\n"
-        "What should the audio say? You can also add non-speech sounds like [laughs], [sighs], etc.\n\n"
-        "<b>Examples:</b>\n"
-        "• Hello, my name is Suno. And, uh — and I like pizza. [laughs]\n"
-        "• A very professional announcement regarding our flight.\n\n"
-        "<i>Type your script below 👇</i>",
+        "🎙️ <b>Audio Generation (Suno Bark)</b>\n\n"
+        "Send me a <b>script</b> or an <b>audio message</b> (I'll transcribe it first).\n\n"
+        f"<b>Non-speech tags you can use:</b>\n{tags_list}\n"
+        "<b>Example:</b>\n"
+        "<i>\"Hello! [clears throat] Uh... I'm really [laughs] happy to be here! [music]\"</i>\n\n"
+        "<i>Type your script or send a voice note below 👇</i>",
         parse_mode="HTML"
     )
+
+@dp.message(BotStates.Audio_prompt, F.voice | F.audio)
+async def receive_audio_input(message: aiogram_types.Message, state: FSMContext):
+    file_id = message.voice.file_id if message.voice else message.audio.file_id
+    await state.clear()
+    
+    status_msg = await message.answer("⏳ <b>Transcribing your voice...</b>", parse_mode="HTML")
+    
+    # Download and transcribe
+    temp_dir = Path("temp_transcriptions")
+    temp_dir.mkdir(exist_ok=True)
+    file_info = await bot.get_file(file_id)
+    file_path = temp_dir / Path(file_info.file_path).name
+    
+    try:
+        await bot.download_file(file_info.file_path, destination=file_path)
+        transcript = await transcribe_audio(file_path, whisper_client)
+        
+        if not transcript or not transcript.strip():
+            await status_msg.edit_text("❌ Could not transcribe audio.")
+            return
+            
+        await status_msg.delete()
+        await start_audio_generation(message, transcript.strip(), STORAGE_DIR)
+        
+    except Exception as e:
+        await status_msg.edit_text(f"❌ <b>Error:</b> <code>{e}</code>", parse_mode="HTML")
+    finally:
+        file_path.unlink(missing_ok=True)
 
 @dp.message(BotStates.Audio_prompt)
 async def receive_audio_prompt(message: aiogram_types.Message, state: FSMContext):
@@ -444,7 +481,7 @@ async def receive_audio_prompt(message: aiogram_types.Message, state: FSMContext
         return
     prompt = (message.text or "").strip()
     if not prompt:
-        await message.answer("Please enter some text to generate audio.")
+        await message.answer("Please enter some text or send audio.")
         return
     await state.clear()
     await start_audio_generation(message, prompt, STORAGE_DIR)
