@@ -13,11 +13,12 @@ services:
         sync: false
       - key: NVIDIA_CHAT_API_KEY
         sync: false
+      - key: NVIDIA_API_KEY
+        sync: false
       - key: POSTGRES_USER
         sync: false
       - key: POSTGRES_PASSWORD
         sync: false
-
   # (Optional) If you want to run Redis on Render for Celery:
   # - type: redis
   #   name: omni-redis
