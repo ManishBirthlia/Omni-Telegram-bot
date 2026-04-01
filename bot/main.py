@@ -679,7 +679,7 @@ async def handle_ping(reader, writer):
 #  ENTRY POINT — graceful shutdown
 async def main():
     # Start a dummy HTTP server on PORT for Render's Web Service requirements
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 10000))
     server = await asyncio.start_server(handle_ping, '0.0.0.0', port)
     
     # Run the dummy server in the background
