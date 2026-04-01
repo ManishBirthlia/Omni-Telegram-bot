@@ -24,7 +24,7 @@ async def transcribe_audio(file_path, whisper_client):
         print(f"Transcription error: {e}")
         return None
 
-async def summarize_text(text, nvidia_client):
+async def summarize_text(text, nvidia_chat_client_1):
     """Summarize text using NVIDIA AI."""
     if not text or len(text.strip()) < 10:
         return "Transcription is too short to summarize."
@@ -32,7 +32,7 @@ async def summarize_text(text, nvidia_client):
     try:
         prompt = f"Please provide a concise bullet-point summary of the following transcription:\n\n{text}"
         completion = await asyncio.to_thread(
-            nvidia_client.chat.completions.create,
+            nvidia_chat_client_1.chat.completions.create,
             model="nvidia/nemotron-3-nano-30b-a3b",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.5,
@@ -43,7 +43,7 @@ async def summarize_text(text, nvidia_client):
         print(f"Summarization error: {e}")
         return "Could not generate summary."
 
-async def process_transcription(message: aiogram_types.Message, file_id: str, bot, whisper_client, nvidia_client):
+async def process_transcription(message: aiogram_types.Message, file_id: str, bot, whisper_client, nvidia_chat_client_1):
     """Download file, transcribe, summarize, and send results."""
     status_msg = await message.answer("⏳ <b>Downloading audio...</b>", parse_mode="HTML")
     
@@ -65,7 +65,7 @@ async def process_transcription(message: aiogram_types.Message, file_id: str, bo
             return
 
         # await status_msg.edit_text("📝 <b>Generating summary...</b>", parse_mode="HTML")
-        # summary = await summarize_text(transcript, nvidia_client)
+        # summary = await summarize_text(transcript, nvidia_chat_client_1)
         
         # Send transcript (if long, send as file)
         if len(transcript) > 4000:

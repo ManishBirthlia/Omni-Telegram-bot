@@ -15,7 +15,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv
 from groq import Groq
-from handlers.chat import groq_AI_chatting, nvidia_AI_chatting
+from handlers.chat import groq_AI_chatting, nvidia_AI_chatting, deepseek_AI_chatting
 from utilities import cancel_if_command, upload_to_gofile_async
 from handlers.videoDownloader import (
     validate_video_url,
@@ -41,10 +41,14 @@ _URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
 load_dotenv()
 
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-nvidia_client = OpenAI(
+nvidia_chat_client_1 = OpenAI(
   base_url = "https://integrate.api.nvidia.com/v1",
-  api_key = os.getenv("NVIDIA_CHAT_API_KEY")
+  api_key = os.getenv("NVIDIA_SIMPLE_CHAT_API_KEY")
 ) 
+nvidia_chat_client_2 = OpenAI(
+  base_url = "https://integrate.api.nvidia.com/v1",
+  api_key = os.getenv("NVIDIA_COMPLEX_CHAT_API_KEY")
+)
 import torch
 device = "cuda" if torch.cuda.is_available() else "cpu"
 whisper_client = whisper.load_model("small", device=device)
@@ -157,9 +161,30 @@ async def cmd_start(message: aiogram_types.Message, state: FSMContext):
 @dp.message(Command("chat"))
 async def cmd_chat(message: aiogram_types.Message, state: FSMContext):
     await state.clear()
-    await state.set_state(BotStates.chatting)
+    
+    markup = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🤖 Nemotron 30B", callback_data="chat_model:nemotron")],
+        [InlineKeyboardButton(text="🧠 DeepSeek V3.2", callback_data="chat_model:deepseek")]
+    ])
+    
     await message.answer(
-        "💬 <b>Chat mode active!</b>\nAsk me anything about the project.\n"
+        "💬 <b>Chat mode</b>\nWhich AI model would you like to chat with?",
+        parse_mode="HTML",
+        reply_markup=markup
+    )
+
+@dp.callback_query(F.data.startswith("chat_model:"))
+async def receive_chat_model(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    model_choice = callback.data.split(":")[1]
+    
+    await state.update_data(chat_model=model_choice)
+    await state.set_state(BotStates.chatting)
+    
+    model_name = "Nemotron 30B" if model_choice == "nemotron" else "DeepSeek V3.2"
+    
+    await callback.message.edit_text(
+        f"💬 <b>Chat mode active! ({model_name})</b>\nAsk me anything about the project.\n"
         "Send any command to exit chat mode.",
         parse_mode="HTML"
     )
@@ -168,7 +193,14 @@ async def cmd_chat(message: aiogram_types.Message, state: FSMContext):
 async def receive_chat_message(message: aiogram_types.Message, state: FSMContext):
     if await cancel_if_command(message, state, resume_command="/chat"):
         return
-    await nvidia_AI_chatting(message, SYSTEM_INSTRUCTION, nvidia_client)
+        
+    data = await state.get_data()
+    model = data.get("chat_model", "nemotron")
+    
+    if model == "deepseek":
+        await deepseek_AI_chatting(message, SYSTEM_INSTRUCTION, nvidia_chat_client_2)
+    else:
+        await nvidia_AI_chatting(message, SYSTEM_INSTRUCTION, nvidia_chat_client_1)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -405,7 +437,7 @@ async def cmd_transcribe(message: aiogram_types.Message, state: FSMContext):
 async def receive_transcription_audio(message: aiogram_types.Message, state: FSMContext):
     file_id = message.voice.file_id if message.voice else message.audio.file_id
     await state.clear()
-    await process_transcription(message, file_id, bot, whisper_client, nvidia_client)
+    await process_transcription(message, file_id, bot, whisper_client, nvidia_chat_client_1)
 
 @dp.message(BotStates.transcribe_waiting)
 async def invalid_transcription_input(message: aiogram_types.Message):

@@ -11,9 +11,11 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
-      - key: NVIDIA_CHAT_API_KEY
+      - key: NVIDIA_SIMPLE_CHAT_API_KEY
         sync: false
-      - key: NVIDIA_API_KEY
+      - key: NVIDIA_COMPLEX_CHAT_API_KEY
+        sync: false
+      - key: NVIDIA_IMAGE_API_KEY
         sync: false
       - key: POSTGRES_USER
         sync: false

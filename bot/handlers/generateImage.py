@@ -93,7 +93,7 @@ async def generate_image(
     )
 
     headers = {
-        "Authorization": f"Bearer {os.getenv('NVIDIA_API_KEY')}",
+        "Authorization": f"Bearer {os.getenv('NVIDIA_IMAGE_API_KEY')}",
         "Accept": "application/json",
     }
 
