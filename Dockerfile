@@ -38,6 +38,7 @@ COPY . .
 
 # Make sure the venv is on PATH
 ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONPATH="/app/bot:$PYTHONPATH"
 ENV PYTHONUNBUFFERED=1
 
 # Create download directories
