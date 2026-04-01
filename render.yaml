@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: omni-telegram-bot
+    env: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: NVIDIA_CHAT_API_KEY
+        sync: false
+      - key: POSTGRES_USER
+        sync: false
+      - key: POSTGRES_PASSWORD
+        sync: false
+
+  # (Optional) If you want to run Redis on Render for Celery:
+  # - type: redis
+  #   name: omni-redis
+  #   plan: free
+  #   ipAllowList: []
+  
+  # (Optional) If you want a background worker for Celery:
+  # - type: worker
+  #   name: omni-celery-worker
+  #   env: docker
+  #   plan: starter
+  #   dockerCommand: celery -A workers.celery_app worker -Q intelligence,generation,assembly,upload --concurrency=4

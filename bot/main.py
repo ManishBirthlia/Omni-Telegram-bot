@@ -638,8 +638,22 @@ async def handle_no_state_text(message: aiogram_types.Message, state: FSMContext
         "Or Use /help to see all commands."
     )
 
+async def handle_ping(reader, writer):
+    # Simple HTTP 200 OK response for Render's health check
+    writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK")
+    await writer.drain()
+    writer.close()
+
 #  ENTRY POINT — graceful shutdown
 async def main():
+    # Start a dummy HTTP server on PORT for Render's Web Service requirements
+    port = int(os.environ.get("PORT", 8080))
+    server = await asyncio.start_server(handle_ping, '0.0.0.0', port)
+    
+    # Run the dummy server in the background
+    asyncio.create_task(server.serve_forever())
+    print(f"✅ Dummy HTTP server listening on port {port} for Render")
+
     try:
         await dp.start_polling(bot, handle_signals=True)
     except (KeyboardInterrupt, SystemExit):
