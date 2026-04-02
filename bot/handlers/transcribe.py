@@ -31,8 +31,7 @@ async def summarize_text(text, nvidia_chat_client_1):
         
     try:
         prompt = f"Please provide a concise bullet-point summary of the following transcription:\n\n{text}"
-        completion = await asyncio.to_thread(
-            nvidia_chat_client_1.chat.completions.create,
+        completion = await nvidia_chat_client_1.chat.completions.create(
             model="nvidia/nemotron-3-nano-30b-a3b",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.5,

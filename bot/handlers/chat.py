@@ -70,19 +70,40 @@ def markdown_to_telegram_html(text: str) -> str:
 
 
 async def _send_formatted(message: aiogram_types.Message, text: str):
-    """Send text as Telegram HTML; fall back to plain text on parse error."""
-    for i in range(0, len(text), 4096):
-        chunk = text[i:i + 4096]
+    """Send text as Telegram HTML; splits by paragraphs to prevent breaking HTML tags."""
+    if not text:
+        return
+
+    # Split text into chunks that don't exceed 4096 characters, ideally at line breaks.
+    max_len = 4090 # Slightly less than 4096 to be safe
+    
+    while text:
+        if len(text) <= max_len:
+            chunk = text
+            text = ""
+        else:
+            # Try to find the last newline within the limit to break cleanly
+            split_at = text.rfind('\n', 0, max_len)
+            if split_at == -1: # No newline found, just hard split
+                split_at = max_len
+            
+            chunk = text[:split_at]
+            text = text[split_at:].lstrip()
+
+        if not chunk.strip():
+            continue
+
         try:
             await message.answer(chunk, parse_mode="HTML")
-        except Exception:
-            # If HTML parsing fails, send as plain text
+        except Exception as e:
+            # If HTML parsing fails (e.g. tag split across chunks), send as plain text
+            print(f"HTML Parse error: {e}. Falling back to plain text for chunk.")
             await message.answer(chunk)
 
 
 async def groq_AI_chatting(message: aiogram_types.Message, SYSTEM_INSTRUCTION, client):
     try:
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             messages=[
                 {"role": "system", "content": SYSTEM_INSTRUCTION},
                 {"role": "user",   "content": message.text},
@@ -98,7 +119,7 @@ async def groq_AI_chatting(message: aiogram_types.Message, SYSTEM_INSTRUCTION, c
 
 async def nvidia_AI_chatting(message: aiogram_types.Message, SYSTEM_INSTRUCTION, nvidia_chat_client_1):
     try:
-        completion = nvidia_chat_client_1.chat.completions.create(
+        completion = await nvidia_chat_client_1.chat.completions.create(
             model="nvidia/nemotron-3-nano-30b-a3b",
             messages=[
                 {"role": "system", "content": SYSTEM_INSTRUCTION},
@@ -106,13 +127,13 @@ async def nvidia_AI_chatting(message: aiogram_types.Message, SYSTEM_INSTRUCTION,
             ],
             temperature=1,
             top_p=1,
-            max_tokens=16384,
+            max_tokens=18384,
             extra_body={"reasoning_budget": 16384, "chat_template_kwargs": {"enable_thinking": True}},
             stream=True,
         )
 
         full_response = ""
-        for chunk in completion:
+        async for chunk in completion:
             if not chunk.choices:
                 continue
             delta = chunk.choices[0].delta
@@ -131,7 +152,7 @@ async def nvidia_AI_chatting(message: aiogram_types.Message, SYSTEM_INSTRUCTION,
 
 async def deepseek_AI_chatting(message: aiogram_types.Message, SYSTEM_INSTRUCTION, nvidia_chat_client_2):
     try:
-        completion = nvidia_chat_client_2.chat.completions.create(
+        completion = await nvidia_chat_client_2.chat.completions.create(
             model="deepseek-ai/deepseek-v3.2",
             messages=[
                 {"role": "system", "content": SYSTEM_INSTRUCTION},
@@ -139,15 +160,15 @@ async def deepseek_AI_chatting(message: aiogram_types.Message, SYSTEM_INSTRUCTIO
             ],
             temperature=1,
             top_p=0.95,
-            max_tokens=16384,
-            extra_body={"chat_template_kwargs": {"thinking": True}},
+            max_tokens=18000, # Increased to allow room for content after reasoning
+            extra_body={"reasoning_budget": 16000, "chat_template_kwargs": {"thinking": True}},
             stream=True,
         )
 
         full_response = ""
         reasoning_response = ""
         
-        for chunk in completion:
+        async for chunk in completion:
             if not getattr(chunk, "choices", None):
                 continue
             delta = chunk.choices[0].delta

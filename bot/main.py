@@ -4,7 +4,7 @@ import asyncio
 import yt_dlp
 import requests
 import whisper
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 from pathlib import Path
 from aiogram.types import FSInputFile
 from aiogram import Bot, Dispatcher, types as aiogram_types, F
@@ -14,7 +14,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv
-from groq import Groq
+from groq import Groq, AsyncGroq
 from handlers.chat import groq_AI_chatting, nvidia_AI_chatting, deepseek_AI_chatting
 from utilities import cancel_if_command, upload_to_gofile_async
 from handlers.videoDownloader import (
@@ -40,12 +40,12 @@ _URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
 
 load_dotenv()
 
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-nvidia_chat_client_1 = OpenAI(
+groq_client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
+nvidia_chat_client_1 = AsyncOpenAI(
   base_url = "https://integrate.api.nvidia.com/v1",
   api_key = os.getenv("NVIDIA_SIMPLE_CHAT_API_KEY")
 ) 
-nvidia_chat_client_2 = OpenAI(
+nvidia_chat_client_2 = AsyncOpenAI(
   base_url = "https://integrate.api.nvidia.com/v1",
   api_key = os.getenv("NVIDIA_COMPLEX_CHAT_API_KEY")
 )
