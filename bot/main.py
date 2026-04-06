@@ -1,10 +1,8 @@
 import os
 import re
 import asyncio
-import yt_dlp
-import requests
 import whisper
-from openai import OpenAI, AsyncOpenAI
+from openai import AsyncOpenAI
 from pathlib import Path
 from aiogram.types import FSInputFile
 from aiogram import Bot, Dispatcher, types as aiogram_types, F
@@ -14,7 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv
-from groq import Groq, AsyncGroq
+from groq import AsyncGroq
 from handlers.chat import groq_AI_chatting, nvidia_AI_chatting, deepseek_AI_chatting
 from utilities import cancel_if_command, upload_to_gofile_async
 from handlers.videoDownloader import (
