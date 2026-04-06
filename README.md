@@ -92,7 +92,7 @@ Here's a curated list of features that would make this bot incredibly powerful �
 | 📆 Reminders / Scheduler | Natural language reminders ("every Monday 9am") via APScheduler + SQLite. | `/remind` |
 | 📄 PDF Tools | Merge, split, compress, rotate, watermark, or extract text from PDFs. | `/pdf` |
 | 🧮 Code Runner | Execute Python, JS, Bash, or Go in a sandboxed Docker container. Returns stdout/stderr. | `/run` |
-| 🎵 Spotify / SoundCloud DL | Download tracks from Spotify (spotdl), SoundCloud, or Deezer. Auto-embeds ID3 tags. | `/music` |
+✅| 🎵 Spotify / SoundCloud DL | Download tracks from Spotify (spotdl), SoundCloud, or Deezer. Auto-embeds ID3 tags. | `/music` |
 | 📰 News Summarizer | Top headlines from any topic, summarized by AI. Sources: BBC, Reuters, HN, Reddit. | `/news` |
 | 📑 AI Document Analyzer | Upload a PDF/DOCX and ask questions about it using RAG. | `/analyze` |
 | 😂 Meme Generator | Pick a template, enter text, get a meme back via Imgflip API (100+ templates). | `/meme` |

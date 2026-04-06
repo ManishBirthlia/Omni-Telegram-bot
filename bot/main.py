@@ -32,6 +32,7 @@ from handlers.generateImage import (
 )
 from handlers.directDownloader import cmd_direct_download
 from handlers.transcribe import process_transcription, transcribe_audio
+from handlers.musicDownloader import process_music_download
 
 # ── URL pattern — matches any http(s) link ─────────────────────
 _URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
@@ -64,6 +65,7 @@ class BotStates(StatesGroup):
     Image_quality            = State()   # /generateImage — step 3: quality
     Image_negative           = State()   # /generateImage — step 4: negative prompt
     transcribe_waiting       = State()   # /transcribe — waiting for audio
+    music_waiting_for_url    = State()   # /music — waiting for URL
 
 #  BOT & DISPATCHER
 bot = Bot(token=os.getenv("TELEGRAM_BOT_TOKEN"))
@@ -88,6 +90,7 @@ You are an AI assistant for Omni AI, a multi-purpose Telegram bot designed to be
 - 🎬 Describe a scene → get an AI-generated video
 - 💬 Ask a question → get an AI-powered answer (Groq/LLaMA/Nvidia)
 - 🎙️ Send audio → get a full transcription
+- 🎵 Send a Spotify link → get the audio track downloaded with metadata
 - 📝 Generate Audio from Text
 - 📸 Generate Image from Text
 - 📹 Generate Video from Text
@@ -98,6 +101,7 @@ Available bot commands the user can use:
 /start — Initialize the bot and authenticate
 /chat — General chat with the AI assistant
 /downloader — Download a video from YouTube, Instagram, Twitter/X, TikTok, and 1000+ sites
+/music — Download tracks from Spotify, SoundCloud, or Deezer with ID3 tags
 /generateAudio — Generate a single audio clip based on a prompt
 /generateImage — Generate a single image based on a prompt
 /generateVideo — Start a new single video generation
@@ -122,6 +126,7 @@ HELP_TEXT = """
 /start — Initialize the bot and authenticate
 /chat — General chat with the AI assistant
 /downloader — Download video (YouTube, Instagram, Twitter/X, TikTok, …)
+/music — Download tracks from Spotify, SoundCloud, or Deezer
 /generateImage — Generate a single image from a prompt
 /generateAudio — Generate a single audio clip from a prompt
 /generateVideo — Start a new single video generation
@@ -440,6 +445,57 @@ async def receive_transcription_audio(message: aiogram_types.Message, state: FSM
 @dp.message(BotStates.transcribe_waiting)
 async def invalid_transcription_input(message: aiogram_types.Message):
     await message.answer("⚠️ Please send an <b>audio file</b> or a <b>voice note</b>.")
+
+# ═══════════════════════════════════════════════════════════════
+#  /music — Spotify, SoundCloud, Deezer Downloader
+# ═══════════════════════════════════════════════════════════════
+@dp.message(Command("music"))
+async def cmd_music(
+    message: aiogram_types.Message,
+    command: CommandObject,
+    state: FSMContext,
+):
+    await state.clear()
+
+    if command.args:
+        music_url = command.args.strip()
+        if not music_url.startswith(("http://", "https://")):
+            await message.answer(
+                "⚠️ That doesn't look like a valid URL.\n"
+                "Please provide a full link starting with <code>https://</code>",
+                parse_mode="HTML",
+            )
+            return
+        await process_music_download(message, music_url, DOWNLOAD_DIR)
+        return
+
+    await state.set_state(BotStates.music_waiting_for_url)
+    await message.answer(
+        "🎵 <b>Music Downloader</b>\n\n"
+        "Send me a music URL from <b>Spotify, SoundCloud, Deezer</b>.\n\n"
+        "<i>Examples:</i>\n"
+        "<code>https://open.spotify.com/track/123456</code>\n"
+        "<code>https://soundcloud.com/artist/track</code>",
+        parse_mode="HTML",
+    )
+
+
+@dp.message(BotStates.music_waiting_for_url)
+async def receive_music_url(message: aiogram_types.Message, state: FSMContext):
+    if await cancel_if_command(message, state, resume_command="/music"):
+        return
+
+    music_url = (message.text or "").strip()
+    if not music_url.startswith(("http://", "https://")):
+        await message.answer(
+            "⚠️ That doesn't look like a valid URL.\n"
+            "Please send a full link starting with <code>https://</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    await state.clear()
+    await process_music_download(message, music_url, DOWNLOAD_DIR)
 
 # ═══════════════════════════════════════════════════════════════
 #  /generateAudio

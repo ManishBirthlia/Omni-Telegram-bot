@@ -16,3 +16,4 @@ sentry-sdk==2.53.0
 sqlalchemy==2.0.47
 uuid>=1.30
 yt-dlp>=2026.3.3
+spotdl>=4.4.3
