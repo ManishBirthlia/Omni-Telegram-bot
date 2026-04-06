@@ -47,7 +47,7 @@
 | AI Chat (Groq 70B & Nvidia 30B) | ✅ Done | `/chat` |
 | AI Video Generation (LTX Video) | ✅ Done | `/generateVideo` |
 | AI Transcription (Local Whisper GPU) | ✅ Done | `/transcribe` |
-| AI Audio Generation (Bark CUDA) | ✅ Done | `/generateAudio` |
+| AI Audio Generation (Bark CUDA) | ✅ Done | `/speak` |
 | AI Image Generation (NVIDIA) | ✅ Done | `/generateImage` |
 | Large File Uploads to GoFile | ✅ Done | Auto (files > 50 MB) |
 
