@@ -1,4 +1,4 @@
-# 🤖 AutoTube AI — Your All-in-One Telegram Power Bot
+# 🤖 Omni AI — Your All-in-One Telegram Power Bot
 
 > **A Python-powered Telegram bot that downloads YouTube & Instagram media, generates AI videos, chats with AI, transcribes audio — and keeps growing with every feature you throw at it.**
 
