@@ -14,6 +14,9 @@ from aiogram.types import FSInputFile
 from bark import SAMPLE_RATE, generate_audio as bark_generate_audio, preload_models
 from scipy.io.wavfile import write as write_wav
 
+os.environ["SUNO_OFFLOAD_CPU"] = "False"
+os.environ["SUNO_USE_SMALL_MODELS"] = "True"
+
 # Keep track of models to avoid reloading unnecessarily
 _models_loaded = False
 _device = "cuda" if torch.cuda.is_available() else "cpu"
